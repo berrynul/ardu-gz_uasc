@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10.2 FATAL_ERROR)
-project(ardupilot_gazebo)
+project(ardu_gz_uasc)
 
 # --------------------------------------------------------------------------- #
 # If ament_cmake is found build as an ament package, otherwise ignore.
@@ -7,9 +7,6 @@ find_package(ament_cmake QUIET)
 if(${ament_cmake_FOUND})
   message("Building ${PROJECT_NAME} as an `ament_cmake` project.")
 endif()
-# Required for GCPSpawner to resolve the installed models path at runtime.
-find_package(ament_index_cpp REQUIRED)
-
 # --------------------------------------------------------------------------- #
 # Compile as C++17 (required by std::filesystem used in GCPSpawnerTest).
 # The rest of the project was C++14; plugins are independent shared libs so
@@ -123,12 +120,10 @@ add_library(GCPSpawner SHARED
 )
 target_include_directories(GCPSpawner PRIVATE
   include
-  ${ament_index_cpp_INCLUDE_DIRS}
 )
 target_link_libraries(GCPSpawner PRIVATE
   gz-sim${GZ_SIM_VER}::gz-sim${GZ_SIM_VER}
   gz-transport${GZ_TRANSPORT_VER}::gz-transport${GZ_TRANSPORT_VER}
-  ament_index_cpp::ament_index_cpp
 )
 
 # --------------------------------------------------------------------------- #
@@ -139,11 +134,9 @@ add_library(GCPSpawnerTest SHARED
 )
 target_include_directories(GCPSpawnerTest PRIVATE
   include
-  ${ament_index_cpp_INCLUDE_DIRS}
 )
 target_link_libraries(GCPSpawnerTest PRIVATE
   gz-sim${GZ_SIM_VER}::gz-sim${GZ_SIM_VER}
-  ament_index_cpp::ament_index_cpp
 )
 
 # --------------------------------------------------------------------------- #

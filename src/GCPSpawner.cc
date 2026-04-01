@@ -6,15 +6,15 @@
 #include <gz/plugin/Register.hh>
 #include <gz/transport/Node.hh>
 #include <gz/msgs/entity_factory.pb.h>
-#include <ament_index_cpp/get_package_share_directory.hpp>
 #include <random>
 #include <vector>
 #include <cmath>
 #include <string>
 #include <sstream>
-#include <stdexcept>
+#include <cstdlib>
+#include <filesystem>
 
-// Resolved once in Configure() via the ament index.
+// Resolved once in Configure() via GZ_SIM_RESOURCE_PATH.
 static std::string GCP_MODEL_BASE_PATH;
 
 namespace gz::sim::systems {
@@ -172,14 +172,24 @@ public:
                    EntityComponentManager &ecm,
                    EventManager & /*eventMgr*/) override
     {
-        try {
-            GCP_MODEL_BASE_PATH =
-                ament_index_cpp::get_package_share_directory("ardupilot_gazebo")
-                + "/models";
-        } catch (const std::exception &e) {
-            gzerr << "GCPSpawner: could not resolve package share directory: "
-                  << e.what() << "\n"
-                  << "  Run: source ~/ardupilot_gazebo/install/setup.bash\n";
+        const char *resource_env = std::getenv("GZ_SIM_RESOURCE_PATH");
+        if (!resource_env) {
+            gzerr << "GCPSpawner: GZ_SIM_RESOURCE_PATH is not set.\n"
+                  << "  Run: source ~/ardu-gz_uasc/install/setup.bash\n";
+            return;
+        }
+        std::istringstream paths(resource_env);
+        std::string dir;
+        while (std::getline(paths, dir, ':')) {
+            if (!dir.empty() &&
+                std::filesystem::is_directory(dir + "/gcp_large_0")) {
+                GCP_MODEL_BASE_PATH = dir;
+                break;
+            }
+        }
+        if (GCP_MODEL_BASE_PATH.empty()) {
+            gzerr << "GCPSpawner: no GCP models found in GZ_SIM_RESOURCE_PATH.\n"
+                  << "  Run: source ~/ardu-gz_uasc/install/setup.bash\n";
             return;
         }
 

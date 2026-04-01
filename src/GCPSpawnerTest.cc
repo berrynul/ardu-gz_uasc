@@ -25,8 +25,7 @@
 #include <gz/sim/components/Model.hh>
 #include <gz/plugin/Register.hh>
 #include <sdf/Root.hh>
-#include <ament_index_cpp/get_package_share_directory.hpp>
-
+#include <cstdlib>
 #include <filesystem>
 #include <sstream>
 #include <string>
@@ -35,7 +34,7 @@
 #include <csignal>
 #include <stdexcept>
 
-// Resolved at Configure() time via ament_index, same as GCPSpawner.cc.
+// Resolved at Configure() time via GZ_SIM_RESOURCE_PATH, same as GCPSpawner.cc.
 static std::string GCP_MODEL_BASE_PATH;
 
 static constexpr double LARGE_SIDE    = 1.2;
@@ -271,14 +270,25 @@ public:
                    gz::sim::EntityComponentManager &,
                    gz::sim::EventManager &) override
     {
-        try {
-            GCP_MODEL_BASE_PATH =
-                ament_index_cpp::get_package_share_directory("ardupilot_gazebo")
-                + "/models";
-        } catch (const std::exception &e) {
-            FAIL("INIT/ament_index",
-                 std::string("could not resolve package share directory: ") + e.what()
-                 + "\n  Is the package installed and sourced?");
+        const char *resource_env = std::getenv("GZ_SIM_RESOURCE_PATH");
+        if (!resource_env) {
+            FAIL("INIT/resource_path",
+                 "GZ_SIM_RESOURCE_PATH is not set.\n"
+                 "  Run: source ~/ardu-gz_uasc/install/setup.bash");
+        }
+        std::istringstream paths(resource_env);
+        std::string dir;
+        while (std::getline(paths, dir, ':')) {
+            if (!dir.empty() &&
+                std::filesystem::is_directory(dir + "/gcp_large_0")) {
+                GCP_MODEL_BASE_PATH = dir;
+                break;
+            }
+        }
+        if (GCP_MODEL_BASE_PATH.empty()) {
+            FAIL("INIT/resource_path",
+                 "No GCP models found in GZ_SIM_RESOURCE_PATH.\n"
+                 "  Run: source ~/ardu-gz_uasc/install/setup.bash");
         }
 
         gzmsg << "\n[GCPSpawnerTest] -- running static tests --\n";

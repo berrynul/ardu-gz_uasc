@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>ardupilot_gazebo</name>
+  <name>ardu_gz_uasc</name>
   <version>0.0.0</version>
   <description>Plugins and models for vehicle simulation in Gazebo Sim with ArduPilot SITL controllers</description>
   <maintainer email="rhys.mainwaring@me.com">Rhys Mainwaring</maintainer>
