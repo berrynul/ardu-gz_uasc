@@ -64,22 +64,22 @@ class GCPSpawner : public System,
     const Point2D TRI_A = {-5.0, -5.0};
     const Point2D TRI_B = { 5.0, -5.0};
     const Point2D TRI_C = { 0.0,  5.0};
-    const int    SET_A_COUNT   = 6;
-    const int    SET_B_COUNT   = 6;
-    const double SET_A_SPACING = 0.8;
-    const double SET_B_SPACING = 0.5;
+    const int    SET_A_MIN     = 3;
+    const int    SET_A_MAX     = 4;
+    const int    SET_B_MIN     = 5;
+    const int    SET_B_MAX     = 10;
+    const double SET_A_SPACING = 3.0;
+    const double SET_B_SPACING = 0.6;
 
     std::string worldName_;
     bool        spawned_ = false;
 
     // ── SDF builder ───────────────────────────────────────────────────────────
-    std::string makeSDF(const std::string &variant, int gcp_num,
+    std::string makeSDF(const std::string &model_name,
                         const std::string &instance_name,
                         double x, double y, double yaw, double side)
     {
         const double half_t = GCP_THICKNESS / 2.0;
-        const std::string model_name =
-            "gcp_" + variant + "_" + std::to_string(gcp_num);
         const std::string tex_uri =
             "file://" + GCP_MODEL_BASE_PATH + "/" + model_name +
             "/materials/textures/" + model_name + ".png";
@@ -116,6 +116,20 @@ class GCPSpawner : public System,
     }
 
     // ── Placement helpers ─────────────────────────────────────────────────────
+    static double hullArea(const std::vector<Point2D> &hull) {
+        double a = 0;
+        int n = hull.size();
+        for (int i = 0; i < n; i++) {
+            int j = (i + 1) % n;
+            a += hull[i].x * hull[j].y;
+            a -= hull[j].x * hull[i].y;
+        }
+        return std::abs(a) / 2.0;
+    }
+
+    static constexpr double MIN_HULL_AREA = 4.0;  // m², reject degenerate layouts
+    static constexpr int    MAX_RETRIES   = 50;
+
     std::vector<Point2D> placeInTriangle(int count, double min_spacing,
                                           std::default_random_engine &rng) {
         double xmn=std::min({TRI_A.x,TRI_B.x,TRI_C.x});
@@ -123,19 +137,43 @@ class GCPSpawner : public System,
         double ymn=std::min({TRI_A.y,TRI_B.y,TRI_C.y});
         double ymx=std::max({TRI_A.y,TRI_B.y,TRI_C.y});
         std::uniform_real_distribution<double> rx(xmn,xmx), ry(ymn,ymx);
-        std::vector<Point2D> placed;
-        int attempts=0;
-        while((int)placed.size()<count && attempts<count*300) {
-            Point2D p={rx(rng),ry(rng)};
-            if(!pointInTriangle(p,TRI_A,TRI_B,TRI_C)){attempts++;continue;}
-            bool ok=true;
-            for(auto &e:placed) if(dist(p,e)<min_spacing){ok=false;break;}
-            if(ok) placed.push_back(p);
-            attempts++;
+
+        for (int retry = 0; retry < MAX_RETRIES; retry++) {
+            std::vector<Point2D> placed;
+            int attempts=0;
+            while((int)placed.size()<count && attempts<count*300) {
+                Point2D p={rx(rng),ry(rng)};
+                if(!pointInTriangle(p,TRI_A,TRI_B,TRI_C)){attempts++;continue;}
+                bool ok=true;
+                for(auto &e:placed) if(dist(p,e)<min_spacing){ok=false;break;}
+                if(ok) placed.push_back(p);
+                attempts++;
+            }
+            if ((int)placed.size() >= count) {
+                auto hull = convexHull(placed);
+                if (hull.size() >= 3 && hullArea(hull) >= MIN_HULL_AREA)
+                    return placed;
+            }
         }
-        if((int)placed.size()<count)
-            gzwarn<<"GCPSpawner: only placed "<<placed.size()<<"/"<<count<<" large GCPs\n";
-        return placed;
+        gzwarn << "GCPSpawner: could not place " << count
+               << " large GCPs with hull area >= " << MIN_HULL_AREA << " m²\n";
+        return placeInTriangle(count, min_spacing * 0.5, rng);
+    }
+
+    // Signed distance from point to the nearest edge of a convex hull.
+    // Positive = inside, negative = outside.
+    static double distToHullEdge(const std::vector<Point2D> &hull, Point2D p) {
+        double min_d = std::numeric_limits<double>::max();
+        int n = hull.size();
+        for (int i = 0; i < n; i++) {
+            int j = (i + 1) % n;
+            Point2D a = hull[i], b = hull[j];
+            // Signed distance from edge (positive = inside for CCW hull)
+            double len = dist(a, b);
+            double d = cross(a, b, p) / len;
+            min_d = std::min(min_d, d);
+        }
+        return min_d;
     }
 
     std::vector<Point2D> placeInHull(int count, double min_spacing,
@@ -147,11 +185,15 @@ class GCPSpawner : public System,
             ymn=std::min(ymn,p.y);ymx=std::max(ymx,p.y);
         }
         std::uniform_real_distribution<double> rx(xmn,xmx), ry(ymn,ymx);
+
+        // Inset from edges by half the small GCP side so they sit fully inside
+        const double edge_inset = SMALL_SIDE / 2.0;
+
         std::vector<Point2D> placed;
         int attempts=0;
         while((int)placed.size()<count && attempts<count*300) {
             Point2D p={rx(rng),ry(rng)};
-            if(!pointInConvexHull(hull,p)){attempts++;continue;}
+            if(distToHullEdge(hull, p) < edge_inset){attempts++;continue;}
             bool ok=true;
             for(auto &e:placed) if(dist(p,e)<min_spacing){ok=false;break;}
             if(ok) placed.push_back(p);
@@ -182,7 +224,7 @@ public:
         std::string dir;
         while (std::getline(paths, dir, ':')) {
             if (!dir.empty() &&
-                std::filesystem::is_directory(dir + "/gcp_large_0")) {
+                std::filesystem::is_directory(dir + "/gcp_large")) {
                 GCP_MODEL_BASE_PATH = dir;
                 break;
             }
@@ -219,14 +261,16 @@ public:
         bool result = false;
 
         std::default_random_engine rng(std::random_device{}());
-        std::uniform_int_distribution<int> gcp_id(0, 9);
         std::uniform_real_distribution<double> yaw_dist(0.0, M_PI * 2.0);
+        std::uniform_int_distribution<int> large_count(SET_A_MIN, SET_A_MAX);
+        std::uniform_int_distribution<int> small_count(SET_B_MIN, SET_B_MAX);
 
         // ── Large GCPs (1.2 m) placed within triangle ─────────────────────────
-        auto pos_a = placeInTriangle(SET_A_COUNT, SET_A_SPACING, rng);
+        // All large GCPs use the single "gcp_large" model (no number).
+        auto pos_a = placeInTriangle(large_count(rng), SET_A_SPACING, rng);
         for (int i = 0; i < (int)pos_a.size(); i++) {
             req.Clear();
-            req.set_sdf(makeSDF("large", gcp_id(rng),
+            req.set_sdf(makeSDF("gcp_large",
                                 "gcp_large_" + std::to_string(i),
                                 pos_a[i].x, pos_a[i].y,
                                 yaw_dist(rng), LARGE_SIDE));
@@ -241,11 +285,13 @@ public:
         }
 
         // ── Small GCPs (0.6 m) inside convex hull of large GCPs ──────────────
+        // Each small GCP gets a unique number (0..N-1) matching gcp_small_{n}.
         auto hull  = convexHull(pos_a);
-        auto pos_b = placeInHull(SET_B_COUNT, SET_B_SPACING, hull, rng);
+        int  n_small = small_count(rng);
+        auto pos_b = placeInHull(n_small, SET_B_SPACING, hull, rng);
         for (int i = 0; i < (int)pos_b.size(); i++) {
             req.Clear();
-            req.set_sdf(makeSDF("small", gcp_id(rng),
+            req.set_sdf(makeSDF("gcp_small_" + std::to_string(i),
                                 "gcp_small_" + std::to_string(i),
                                 pos_b[i].x, pos_b[i].y,
                                 yaw_dist(rng), SMALL_SIDE));

@@ -3,7 +3,6 @@
   <model name="gcp_small_8">
     <static>true</static>
     <link name="base">
-      <!-- z = half thickness so bottom face sits exactly on the ground plane -->
       <pose>0 0 0.0015 0 0 0</pose>
 
       <collision name="collision">
@@ -16,9 +15,6 @@
           <diffuse>1 1 1 1</diffuse>
           <specular>0.05 0.05 0.05 1</specular>
           <pbr><metal>
-            <!-- model:// URI: safe for static loading via GZ_SIM_RESOURCE_PATH.
-                 GCPSpawner.cc does NOT read this file; it builds its own
-                 inline SDF with a runtime-resolved absolute file:// path. -->
             <albedo_map>model://gcp_small_8/materials/textures/gcp_small_8.png</albedo_map>
             <metalness>0.0</metalness>
             <roughness>1.0</roughness>

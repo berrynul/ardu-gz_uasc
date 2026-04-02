@@ -1,21 +1,21 @@
 <?xml version="1.0"?>
 <sdf version="1.9">
-  <model name="gcp_small_1">
+  <model name="gcp_large">
     <static>true</static>
     <link name="base">
       <pose>0 0 0.0015 0 0 0</pose>
 
       <collision name="collision">
-        <geometry><box><size>0.6 0.6 0.003</size></box></geometry>
+        <geometry><box><size>1.2 1.2 0.003</size></box></geometry>
       </collision>
 
       <visual name="visual">
-        <geometry><box><size>0.6 0.6 0.003</size></box></geometry>
+        <geometry><box><size>1.2 1.2 0.003</size></box></geometry>
         <material>
           <diffuse>1 1 1 1</diffuse>
           <specular>0.05 0.05 0.05 1</specular>
           <pbr><metal>
-            <albedo_map>model://gcp_small_1/materials/textures/gcp_small_1.png</albedo_map>
+            <albedo_map>model://gcp_large/materials/textures/gcp_large.png</albedo_map>
             <metalness>0.0</metalness>
             <roughness>1.0</roughness>
           </metal></pbr>

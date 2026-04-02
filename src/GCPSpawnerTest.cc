@@ -40,8 +40,10 @@ static std::string GCP_MODEL_BASE_PATH;
 static constexpr double LARGE_SIDE    = 1.2;
 static constexpr double SMALL_SIDE    = 0.6;
 static constexpr double GCP_THICKNESS = 0.003;
-static const int EXPECTED_LARGE = 6;
-static const int EXPECTED_SMALL = 6;
+static const int EXPECTED_LARGE_MIN = 3;
+static const int EXPECTED_LARGE_MAX = 4;
+static const int EXPECTED_SMALL_MIN = 5;
+static const int EXPECTED_SMALL_MAX = 10;
 
 namespace fs = std::filesystem;
 
@@ -63,13 +65,11 @@ static void PASS(const std::string &test_id, const std::string &msg = "")
 // ── [A] + [B]: SDF round-trip ─────────────────────────────────────────────────
 // Rebuild the SDF string for one representative model of each variant and
 // verify it parses cleanly and contains exactly one model.
-static std::string buildSDF(const std::string &variant, int gcp_num,
+static std::string buildSDF(const std::string &model_name,
                              const std::string &instance_name,
                              double x, double y, double yaw, double side)
 {
     const double half_t = GCP_THICKNESS / 2.0;
-    const std::string model_name =
-        "gcp_" + variant + "_" + std::to_string(gcp_num);
     const std::string tex_uri =
         "file://" + GCP_MODEL_BASE_PATH + "/" + model_name +
         "/materials/textures/" + model_name + ".png";
@@ -106,62 +106,82 @@ static std::string buildSDF(const std::string &variant, int gcp_num,
 
 static void testSdfParsing()
 {
-    for (const auto &[variant, side] :
-         std::vector<std::pair<std::string,double>>{{"large", LARGE_SIDE},
-                                                     {"small", SMALL_SIDE}})
+    // Test large (single model, no number)
     {
-        const std::string tid = "A+B/sdf_parse_" + variant;
-        const std::string sdfStr = buildSDF(variant, 0,
-                                            "test_" + variant, 0, 0, 0, side);
+        const std::string tid = "A+B/sdf_parse_large";
+        const std::string sdfStr = buildSDF("gcp_large",
+                                            "test_large", 0, 0, 0, LARGE_SIDE);
         sdf::Root root;
         auto errors = root.LoadSdfString(sdfStr);
-
-        // [A] parse must be error-free
         if (!errors.empty()) {
-            std::string msg = "SDF parse errors for variant '" + variant + "':\n";
+            std::string msg = "SDF parse errors for large:\n";
             for (auto &e : errors) msg += "  " + e.Message() + "\n";
             FAIL(tid, msg);
         }
-
-        // [B] root must contain a model
         if (!root.Model())
-            FAIL(tid, "sdf::Root contains no model after parsing variant '"
-                      + variant + "'");
+            FAIL(tid, "sdf::Root contains no model after parsing large");
+        if (root.Model()->Name() != "test_large")
+            FAIL(tid, "Model name mismatch: expected 'test_large', got '"
+                      + root.Model()->Name() + "'");
+        PASS(tid, "side=" + std::to_string(LARGE_SIDE) + " m");
+    }
 
-        // Also verify the model name round-tripped correctly
-        if (root.Model()->Name() != "test_" + variant)
-            FAIL(tid, "Model name mismatch: expected 'test_" + variant +
-                      "', got '" + root.Model()->Name() + "'");
-
-        PASS(tid, "variant=" + variant + " side=" + std::to_string(side) + " m");
+    // Test small (numbered models)
+    {
+        const std::string tid = "A+B/sdf_parse_small";
+        const std::string sdfStr = buildSDF("gcp_small_0",
+                                            "test_small", 0, 0, 0, SMALL_SIDE);
+        sdf::Root root;
+        auto errors = root.LoadSdfString(sdfStr);
+        if (!errors.empty()) {
+            std::string msg = "SDF parse errors for small:\n";
+            for (auto &e : errors) msg += "  " + e.Message() + "\n";
+            FAIL(tid, msg);
+        }
+        if (!root.Model())
+            FAIL(tid, "sdf::Root contains no model after parsing small");
+        if (root.Model()->Name() != "test_small")
+            FAIL(tid, "Model name mismatch: expected 'test_small', got '"
+                      + root.Model()->Name() + "'");
+        PASS(tid, "side=" + std::to_string(SMALL_SIDE) + " m");
     }
 }
 
 // ── [C]: texture files exist on disk ──────────────────────────────────────────
 static void testTextureFiles()
 {
-    for (const auto &[variant, side] :
-         std::vector<std::pair<std::string,double>>{{"large", LARGE_SIDE},
-                                                     {"small", SMALL_SIDE}})
+    // Single large GCP model
     {
-        for (int n = 0; n < 10; ++n) {
-            const std::string model_name =
-                "gcp_" + variant + "_" + std::to_string(n);
-            const fs::path tex_path =
-                fs::path(GCP_MODEL_BASE_PATH) / model_name /
-                "materials" / "textures" / (model_name + ".png");
-            const std::string tid = "C/texture_exists_" + model_name;
+        const std::string model_name = "gcp_large";
+        const fs::path tex_path =
+            fs::path(GCP_MODEL_BASE_PATH) / model_name /
+            "materials" / "textures" / (model_name + ".png");
+        const std::string tid = "C/texture_exists_" + model_name;
 
-            if (!fs::exists(tex_path))
-                FAIL(tid, "Texture not found at: " + tex_path.string() +
-                          "\nDid you run gen_gcps.py with the correct OUTPUT_DIR?");
+        if (!fs::exists(tex_path))
+            FAIL(tid, "Texture not found at: " + tex_path.string() +
+                      "\nDid you run generate_gcps.py?");
+        if (fs::file_size(tex_path) < 1024)
+            FAIL(tid, "Texture file suspiciously small (<1 KB): "
+                      + tex_path.string());
+        PASS(tid);
+    }
 
-            if (fs::file_size(tex_path) < 1024)
-                FAIL(tid, "Texture file suspiciously small (<1 KB): "
-                          + tex_path.string());
+    // Numbered small GCP models (0-9)
+    for (int n = 0; n < 10; ++n) {
+        const std::string model_name = "gcp_small_" + std::to_string(n);
+        const fs::path tex_path =
+            fs::path(GCP_MODEL_BASE_PATH) / model_name /
+            "materials" / "textures" / (model_name + ".png");
+        const std::string tid = "C/texture_exists_" + model_name;
 
-            PASS(tid);
-        }
+        if (!fs::exists(tex_path))
+            FAIL(tid, "Texture not found at: " + tex_path.string() +
+                      "\nDid you run generate_gcps.py?");
+        if (fs::file_size(tex_path) < 1024)
+            FAIL(tid, "Texture file suspiciously small (<1 KB): "
+                      + tex_path.string());
+        PASS(tid);
     }
 }
 
@@ -188,18 +208,20 @@ static void testEntitiesInECM(const gz::sim::EntityComponentManager &ecm)
              "No gcp_large_* or gcp_small_* models found in ECM. "
              "GCPSpawner may not have run, or SdfEntityCreator silently failed.");
 
-    // [E] counts must match what the spawner is configured to place
-    if (large_count != EXPECTED_LARGE)
+    // [E] counts must fall within the spawner's configured ranges
+    if (large_count < EXPECTED_LARGE_MIN || large_count > EXPECTED_LARGE_MAX)
         FAIL("E/large_count",
-             "Expected " + std::to_string(EXPECTED_LARGE) +
+             "Expected " + std::to_string(EXPECTED_LARGE_MIN) + "-" +
+             std::to_string(EXPECTED_LARGE_MAX) +
              " large GCP entities, found " + std::to_string(large_count) +
-             ". Check SET_A_COUNT and placement geometry.");
+             ". Check SET_A_MIN/SET_A_MAX and placement geometry.");
 
-    if (small_count != EXPECTED_SMALL)
+    if (small_count < EXPECTED_SMALL_MIN || small_count > EXPECTED_SMALL_MAX)
         FAIL("E/small_count",
-             "Expected " + std::to_string(EXPECTED_SMALL) +
+             "Expected " + std::to_string(EXPECTED_SMALL_MIN) + "-" +
+             std::to_string(EXPECTED_SMALL_MAX) +
              " small GCP entities, found " + std::to_string(small_count) +
-             ". Check SET_B_COUNT and convex-hull placement.");
+             ". Check SET_B_MIN/SET_B_MAX and convex-hull placement.");
 
     PASS("D+E/entity_counts",
          std::to_string(large_count) + " large, " +
@@ -211,13 +233,13 @@ static void testEntitiesInECM(const gz::sim::EntityComponentManager &ecm)
 // rather than querying the renderer — renderer state isn't accessible here.
 static void testBoxDimensions()
 {
-    for (const auto &[variant, expected_side] :
-         std::vector<std::pair<std::string,double>>{{"large", LARGE_SIDE},
-                                                     {"small", SMALL_SIDE}})
+    for (const auto &[model_name, expected_side] :
+         std::vector<std::pair<std::string,double>>{{"gcp_large", LARGE_SIDE},
+                                                     {"gcp_small_0", SMALL_SIDE}})
     {
-        const std::string tid = "F/box_dims_" + variant;
+        const std::string tid = "F/box_dims_" + model_name;
         sdf::Root root;
-        root.LoadSdfString(buildSDF(variant, 0, "dim_test", 0, 0, 0,
+        root.LoadSdfString(buildSDF(model_name, "dim_test", 0, 0, 0,
                                     expected_side));
         const sdf::Model *model = root.Model();
         if (!model) { FAIL(tid, "no model"); return; }
@@ -280,7 +302,7 @@ public:
         std::string dir;
         while (std::getline(paths, dir, ':')) {
             if (!dir.empty() &&
-                std::filesystem::is_directory(dir + "/gcp_large_0")) {
+                std::filesystem::is_directory(dir + "/gcp_large")) {
                 GCP_MODEL_BASE_PATH = dir;
                 break;
             }
