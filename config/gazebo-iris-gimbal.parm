@@ -2,6 +2,11 @@
 FRAME_CLASS	     1
 FRAME_TYPE	     1
 
+# SITL simulates two IMUs that diverge artificially — limit to one to avoid
+# false "Accels inconsistent" pre-arm failure. SIM_IMU_COUNT is SITL-only.
+SIM_IMU_COUNT	     1
+EK3_IMU_MASK	     1
+
 # Match servo out for motors
 MOT_PWM_MIN      1100
 MOT_PWM_MAX      1900
