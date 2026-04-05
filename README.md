@@ -1,5 +1,5 @@
 # Description
-Fork of ardupilot_gazebo, with early modifications for testing a drone for the C-UASC university competition.
+Modification of the ardupilot_gazebo package. Made for testing a drone for the C-UASC university competition.
 
 
 # ArduPilot Gazebo Plugin
