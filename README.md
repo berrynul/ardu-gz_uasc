@@ -1,3 +1,7 @@
+# Description
+Fork of ardupilot_gazebo, with early modifications for testing a drone for the C-UASC university competition.
+
+
 # ArduPilot Gazebo Plugin
 
 [![ubuntu-build](https://github.com/ArduPilot/ardupilot_gazebo/actions/workflows/ubuntu-build.yml/badge.svg)](https://github.com/ArduPilot/ardupilot_gazebo/actions/workflows/ubuntu-build.yml)
